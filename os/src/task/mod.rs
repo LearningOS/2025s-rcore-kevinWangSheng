@@ -54,6 +54,7 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            syscall_counts: [0; 500],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -135,6 +136,46 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// Get the current task's syscall count for a specific syscall ID
+    fn get_current_syscall_count(&self, syscall_id: usize) -> usize {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_counts[syscall_id]
+    }
+
+    /// Increment the current task's syscall count for a specific syscall ID
+    fn increment_current_syscall_count(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_counts[syscall_id] += 1;
+    }
+
+    /// Get the current task's memory at a specific address
+    fn get_current_task_memory(&self, addr: usize) -> u8 {
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let _task = &inner.tasks[current];
+        unsafe {
+            *(addr as *const u8)
+        }
+    }
+
+    /// Set the current task's memory at a specific address
+    fn set_current_task_memory(&self, addr: usize, value: u8) {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let _task = &mut inner.tasks[current];
+        unsafe {
+            *(addr as *mut u8) = value;
+        }
+    }
+
+    /// Get the current task ID
+    fn get_current_task(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.current_task
+    }
 }
 
 /// Run the first task in task list.
@@ -168,4 +209,29 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Get the current task ID
+pub fn current_task() -> usize {
+    TASK_MANAGER.get_current_task()
+}
+
+/// Get the current task's syscall count for a specific syscall ID
+pub fn get_current_syscall_count(syscall_id: usize) -> usize {
+    TASK_MANAGER.get_current_syscall_count(syscall_id)
+}
+
+/// Increment the current task's syscall count for a specific syscall ID
+pub fn increment_current_syscall_count(syscall_id: usize) {
+    TASK_MANAGER.increment_current_syscall_count(syscall_id);
+}
+
+/// Get the current task's memory at a specific address
+pub fn get_current_task_memory(addr: usize) -> u8 {
+    TASK_MANAGER.get_current_task_memory(addr)
+}
+
+/// Set the current task's memory at a specific address
+pub fn set_current_task_memory(addr: usize, value: u8) {
+    TASK_MANAGER.set_current_task_memory(addr, value);
 }
